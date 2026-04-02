@@ -1,0 +1,35 @@
+name: route_next
+description: >-
+  Next.js-style navigation for Flutter web and mobile. A powerful, URL-first
+  router with support for nested layouts, asynchronous guards, deep linking,
+  and automatic browser history integration. Seamlessly handle browser refresh
+  and back/forward navigation with a clean, declarative API.
+version: 1.0.0
+topics:
+  - navigation
+  - router
+  - web
+  - saas
+  - nextjs
+homepage: https://github.com/durgeshparekh/route_next
+repository: https://github.com/durgeshparekh/route_next
+issue_tracker: https://github.com/durgeshparekh/route_next/issues
+documentation: https://github.com/durgeshparekh/route_next#readme
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  # No assets needed for the package itself
