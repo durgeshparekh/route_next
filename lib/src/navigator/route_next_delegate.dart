@@ -92,11 +92,13 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
       extra: extra,
     );
 
+    // Drop the current page before committing, so the replacement takes
+    // the current slot in the history stack.
     if (_stack.isNotEmpty) {
       _stack.removeLast();
     }
-    _stack.add(matchWithExtra);
-    _updateDocumentTitle(matchWithExtra);
+    _commitToStack(matchWithExtra);
+    _updateDocumentTitle(_stack.last);
     notifyListeners();
   }
 
@@ -141,22 +143,21 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
         library: 'route_next',
         context: ErrorDescription('while handling route redirection'),
       ));
-      _stack.add(RouteMatch.notFound(configuration.resolvedPath));
+      _commitToStack(RouteMatch.notFound(configuration.resolvedPath),
+          replace: replace);
       notifyListeners();
       return;
     }
 
     if (configuration.isNotFound) {
-      if (replace) _stack.clear();
-      _stack.add(configuration);
+      _commitToStack(configuration, replace: replace);
       notifyListeners();
       return;
     }
 
     final context = navigatorKey.currentContext;
     if (context == null || configuration.guardChain.isEmpty) {
-      if (replace) _stack.clear();
-      _stack.add(configuration);
+      _commitToStack(configuration, replace: replace);
       _updateDocumentTitle(configuration);
       notifyListeners();
       return;
@@ -166,8 +167,7 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
     switch (action.type) {
       case NavigationActionType.allow:
-        if (replace) _stack.clear();
-        _stack.add(configuration);
+        _commitToStack(configuration, replace: replace);
         _updateDocumentTitle(configuration);
         notifyListeners();
 
@@ -180,6 +180,33 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
         if (_stack.isEmpty) {
           notifyListeners();
         }
+    }
+  }
+
+  /// Adds [match] to the navigation stack, always preventing duplicate entries.
+  ///
+  /// If [replace] is true, clears the entire stack first (used on first load
+  /// and for replace-mode redirects).
+  ///
+  /// Otherwise, if a stack entry with the same resolved path + params + query
+  /// already exists, the stack is **truncated** to that entry rather than
+  /// appending a duplicate. This is the single choke-point that prevents
+  /// `!keyReservation.contains(key)` assertion failures in the Navigator —
+  /// which occur whenever two [Page]s share the same [LocalKey].
+  void _commitToStack(RouteMatch match, {bool replace = false}) {
+    if (replace) {
+      _stack.clear();
+      _stack.add(match);
+      return;
+    }
+    final existingIndex = _stack.lastIndexWhere((m) =>
+        m.resolvedPath == match.resolvedPath &&
+        m.params == match.params &&
+        m.query == match.query);
+    if (existingIndex != -1) {
+      _stack.removeRange(existingIndex + 1, _stack.length);
+    } else {
+      _stack.add(match);
     }
   }
 
@@ -204,7 +231,7 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
       pages: [
         for (final m in _stack)
           _buildPage(
-            key: ValueKey(m.resolvedPath + (m.extra?.hashCode.toString() ?? '')),
+            key: _pageKey(m),
             child: m.isNotFound
                 ? (notFound?.call(context) ?? _defaultNotFound(context))
                 : m.route.builder(context, m.allParams),
@@ -212,7 +239,12 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
           ),
       ],
       onDidRemovePage: (page) {
-        if (_stack.isNotEmpty) {
+        // Only sync _stack when the Navigator removed a page on its own
+        // initiative (e.g. the user pressed the system back button).
+        // When the delegate itself shortens _stack and calls notifyListeners(),
+        // Flutter reconciles and also fires onDidRemovePage — but _stack is
+        // already up-to-date at that point, so we must not remove again.
+        if (_stack.isNotEmpty && page.key == _pageKey(_stack.last)) {
           _stack.removeLast();
           notifyListeners();
         }
@@ -224,12 +256,10 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
     // Wrap the entire Navigator in the layout chain starting from the OUTMOST parent.
     // This allows shared layouts (e.g., Home, Dashboard) to persist their internal state
     // because they are wrapped in stable KeyedSubtree nodes based on their depth.
-    for (int i = 0; i < match.layoutChain.length; i++) {
-      final layoutIndex = match.layoutChain.length - 1 - i;
-      final layout = match.layoutChain[layoutIndex];
+    for (int i = match.layoutChain.length - 1; i >= 0; i--) {
       body = KeyedSubtree(
-        key: ValueKey('route_next_layout_$layoutIndex'),
-        child: layout(context, body),
+        key: ValueKey('route_next_layout_$i'),
+        child: match.layoutChain[i](context, body),
       );
     }
 
@@ -239,6 +269,14 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
     return body;
   }
+
+  /// Returns a collision-free key for a page in the Navigator stack.
+  ///
+  /// Using a record avoids the string-concatenation ambiguity of
+  /// `resolvedPath + extra.hashCode.toString()` (e.g. path "/a1" with no extra
+  /// would collide with path "/a" whose extra has hashCode == 1).
+  LocalKey _pageKey(RouteMatch m) =>
+      ValueKey((m.resolvedPath, m.extra?.hashCode));
 
   Page<dynamic> _buildPage({
     required LocalKey key,

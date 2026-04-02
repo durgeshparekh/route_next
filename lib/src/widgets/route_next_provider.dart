@@ -23,5 +23,6 @@ class RouteNextProvider extends InheritedWidget {
 
   @override
   bool updateShouldNotify(RouteNextProvider oldWidget) =>
-      currentMatch != oldWidget.currentMatch;
+      currentMatch != oldWidget.currentMatch ||
+      currentMatch?.extra != oldWidget.currentMatch?.extra;
 }
