@@ -118,10 +118,11 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
     // Check if we already have this state in the history stack.
     // This is typical for browser back/forward navigation.
+    // NOTE: Map.== uses reference equality in Dart, so we need _mapsEqual.
     final existingIndex = _stack.lastIndexWhere((m) =>
         m.resolvedPath == configuration.resolvedPath &&
-        m.params == configuration.params &&
-        m.query == configuration.query);
+        _mapsEqual(m.params, configuration.params) &&
+        _mapsEqual(m.query, configuration.query));
 
     if (existingIndex != -1) {
       // Synchronize stack by popping items that were ahead of this state.
@@ -183,6 +184,15 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
     }
   }
 
+  static bool _mapsEqual(Map<String, String> a, Map<String, String> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
   /// Adds [match] to the navigation stack, always preventing duplicate entries.
   ///
   /// If [replace] is true, clears the entire stack first (used on first load
@@ -201,8 +211,8 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
     }
     final existingIndex = _stack.lastIndexWhere((m) =>
         m.resolvedPath == match.resolvedPath &&
-        m.params == match.params &&
-        m.query == match.query);
+        _mapsEqual(m.params, match.params) &&
+        _mapsEqual(m.query, match.query));
     if (existingIndex != -1) {
       _stack.removeRange(existingIndex + 1, _stack.length);
     } else {
