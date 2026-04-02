@@ -21,7 +21,7 @@ void main() {
 
       expect(registry.match('/about'), isNotNull);
       expect(registry.match('/contact'), isNotNull);
-      expect(registry.match('/about')!.matchedPath, '/about');
+      expect(registry.match('/about')!.resolvedPath, '/about');
     });
 
     test('matches dynamic parameter paths', () {
@@ -73,7 +73,7 @@ void main() {
       expect(registry.match('/dashboard/analytics'), isNotNull);
       expect(registry.match('/dashboard/settings'), isNotNull);
       expect(
-        registry.match('/dashboard/analytics')!.matchedPath,
+        registry.match('/dashboard/analytics')!.resolvedPath,
         '/dashboard/analytics',
       );
     });
@@ -203,6 +203,33 @@ void main() {
       expect(m, isNotNull);
       expect(m!.query['q'], 'flutter');
       expect(m.query['page'], '2');
+    });
+    test('populates matchChain for nested routes', () {
+      registry.build([
+        RouteNextRoute(
+          path: '/a',
+          builder: (_, __) => _w('a'),
+          children: [
+            RouteNextRoute(
+              path: 'b',
+              builder: (_, __) => _w('b'),
+              children: [
+                RouteNextRoute(
+                  path: 'c',
+                  builder: (_, __) => _w('c'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      final m = registry.match('/a/b/c');
+      expect(m, isNotNull);
+      expect(m!.matchChain.length, 3);
+      expect(m.matchChain[0].path, '/a');
+      expect(m.matchChain[1].path, '/a/b');
+      expect(m.matchChain[2].path, '/a/b/c');
     });
   });
 }

@@ -13,7 +13,8 @@ void main() {
         route: route,
         params: {'id': '42'},
         query: {'id': 'ignored', 'tab': 'posts'},
-        matchedPath: '/users/42',
+        path: '/users/:id',
+        resolvedPath: '/users/42',
       );
 
       expect(match.allParams['id'], '42'); // path param wins
@@ -29,13 +30,15 @@ void main() {
         route: route,
         params: {},
         query: {},
-        matchedPath: '/about',
+        path: '/about',
+        resolvedPath: '/about',
       );
       const m2 = RouteMatch(
         route: route,
         params: {},
         query: {},
-        matchedPath: '/about',
+        path: '/about',
+        resolvedPath: '/about',
       );
       expect(m1, equals(m2));
     });

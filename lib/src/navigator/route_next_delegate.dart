@@ -25,7 +25,12 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
     this.globalLayout,
     this.notFound,
     this.appTitle = '',
-  }) : _navigatorKey = navigatorKey;
+    RouteMatch? initialMatch,
+  }) : _navigatorKey = navigatorKey {
+    if (initialMatch != null) {
+      _stack.add(initialMatch);
+    }
+  }
 
   /// The route registry.
   final RouteRegistry registry;
@@ -40,8 +45,10 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
   final String appTitle;
 
   final GlobalKey<NavigatorState> _navigatorKey;
+  final List<RouteMatch> _stack = [];
+  bool _initialized = false;
 
-  RouteMatch? _currentMatch;
+  RouteMatch? get _currentMatch => _stack.isNotEmpty ? _stack.last : null;
 
   @override
   GlobalKey<NavigatorState> get navigatorKey => _navigatorKey;
@@ -50,18 +57,46 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
   RouteMatch? get currentConfiguration => _currentMatch;
 
   /// Navigate to a path by adding a history entry.
-  void push(String path, {Map<String, String>? query}) {
+  void push(String path, {Map<String, String>? query, Object? extra}) {
     final match = registry.match(path, query: query ?? const {}) ??
         RouteMatch.notFound(path);
-    setNewRoutePath(match);
+    final matchWithExtra = RouteMatch(
+      route: match.route,
+      params: match.params,
+      query: match.query,
+      path: match.path,
+      resolvedPath: match.resolvedPath,
+      layoutChain: match.layoutChain,
+      guardChain: match.guardChain,
+      matchChain: match.matchChain,
+      isNotFound: match.isNotFound,
+      extra: extra,
+    );
+    setNewRoutePath(matchWithExtra);
   }
 
   /// Navigate to a path, replacing the current history entry.
-  void replace(String path, {Map<String, String>? query}) {
+  void replace(String path, {Map<String, String>? query, Object? extra}) {
     final match = registry.match(path, query: query ?? const {}) ??
         RouteMatch.notFound(path);
-    _currentMatch = match;
-    _updateDocumentTitle(match);
+    final matchWithExtra = RouteMatch(
+      route: match.route,
+      params: match.params,
+      query: match.query,
+      path: match.path,
+      resolvedPath: match.resolvedPath,
+      layoutChain: match.layoutChain,
+      guardChain: match.guardChain,
+      matchChain: match.matchChain,
+      isNotFound: match.isNotFound,
+      extra: extra,
+    );
+
+    if (_stack.isNotEmpty) {
+      _stack.removeLast();
+    }
+    _stack.add(matchWithExtra);
+    _updateDocumentTitle(matchWithExtra);
     notifyListeners();
   }
 
@@ -74,31 +109,54 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
   @override
   Future<void> setNewRoutePath(RouteMatch configuration) async {
+    if (!_initialized) {
+      _initialized = true;
+      return _handleNewPath(configuration, 0, replace: true);
+    }
+
+    // Check if we already have this state in the history stack.
+    // This is typical for browser back/forward navigation.
+    final existingIndex = _stack.lastIndexWhere((m) =>
+        m.resolvedPath == configuration.resolvedPath &&
+        m.params == configuration.params &&
+        m.query == configuration.query);
+
+    if (existingIndex != -1) {
+      // Synchronize stack by popping items that were ahead of this state.
+      _stack.removeRange(existingIndex + 1, _stack.length);
+      _updateDocumentTitle(_stack.last);
+      notifyListeners();
+      return;
+    }
+
     return _handleNewPath(configuration, 0);
   }
 
-  Future<void> _handleNewPath(RouteMatch configuration, int depth) async {
+  Future<void> _handleNewPath(RouteMatch configuration, int depth,
+      {bool replace = false}) async {
     if (depth > _maxRedirectMatchDepth) {
       FlutterError.reportError(FlutterErrorDetails(
         exception: Exception(
-            'RouteNext: Infinite redirect loop detected at path: ${configuration.matchedPath}'),
+            'RouteNext: Infinite redirect loop detected at path: ${configuration.resolvedPath}'),
         library: 'route_next',
         context: ErrorDescription('while handling route redirection'),
       ));
-      _currentMatch = RouteMatch.notFound(configuration.matchedPath);
+      _stack.add(RouteMatch.notFound(configuration.resolvedPath));
       notifyListeners();
       return;
     }
 
     if (configuration.isNotFound) {
-      _currentMatch = configuration;
+      if (replace) _stack.clear();
+      _stack.add(configuration);
       notifyListeners();
       return;
     }
 
     final context = navigatorKey.currentContext;
     if (context == null || configuration.guardChain.isEmpty) {
-      _currentMatch = configuration;
+      if (replace) _stack.clear();
+      _stack.add(configuration);
       _updateDocumentTitle(configuration);
       notifyListeners();
       return;
@@ -108,17 +166,18 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
     switch (action.type) {
       case NavigationActionType.allow:
-        _currentMatch = configuration;
+        if (replace) _stack.clear();
+        _stack.add(configuration);
         _updateDocumentTitle(configuration);
         notifyListeners();
 
       case NavigationActionType.redirect:
         final redirectMatch = registry.match(action.redirectPath!) ??
             RouteMatch.notFound(action.redirectPath!);
-        await _handleNewPath(redirectMatch, depth + 1);
+        await _handleNewPath(redirectMatch, depth + 1, replace: replace);
 
       case NavigationActionType.deny:
-        if (_currentMatch == null) {
+        if (_stack.isEmpty) {
           notifyListeners();
         }
     }
@@ -134,34 +193,51 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
   @override
   Widget build(BuildContext context) {
-    final match = _currentMatch;
-
-    Widget body;
-    if (match == null || match.isNotFound) {
-      body = notFound?.call(context) ?? _defaultNotFound(context);
-    } else {
-      body = match.route.builder(context, match.allParams);
-
-      for (final layout in match.layoutChain.reversed) {
-        body = layout(context, body);
-      }
-
-      if (globalLayout != null) {
-        body = globalLayout!(context, body);
-      }
+    if (_stack.isEmpty) {
+      return const SizedBox.shrink();
     }
 
-    return Navigator(
+    final match = _currentMatch!;
+
+    final navigator = Navigator(
       key: navigatorKey,
       pages: [
-        _buildPage(
-          key: ValueKey(match?.matchedPath ?? '404'),
-          child: body,
-          transition: match?.route.transition,
-        ),
+        for (final m in _stack)
+          _buildPage(
+            key: ValueKey(m.resolvedPath + (m.extra?.hashCode.toString() ?? '')),
+            child: m.isNotFound
+                ? (notFound?.call(context) ?? _defaultNotFound(context))
+                : m.route.builder(context, m.allParams),
+            transition: m.route.transition,
+          ),
       ],
-      onDidRemovePage: (page) {},
+      onDidRemovePage: (page) {
+        if (_stack.isNotEmpty) {
+          _stack.removeLast();
+          notifyListeners();
+        }
+      },
     );
+
+    Widget body = navigator;
+
+    // Wrap the entire Navigator in the layout chain starting from the OUTMOST parent.
+    // This allows shared layouts (e.g., Home, Dashboard) to persist their internal state
+    // because they are wrapped in stable KeyedSubtree nodes based on their depth.
+    for (int i = 0; i < match.layoutChain.length; i++) {
+      final layoutIndex = match.layoutChain.length - 1 - i;
+      final layout = match.layoutChain[layoutIndex];
+      body = KeyedSubtree(
+        key: ValueKey('route_next_layout_$layoutIndex'),
+        child: layout(context, body),
+      );
+    }
+
+    if (globalLayout != null) {
+      body = globalLayout!(context, body);
+    }
+
+    return body;
   }
 
   Page<dynamic> _buildPage({

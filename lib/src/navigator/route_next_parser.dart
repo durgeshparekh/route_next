@@ -36,16 +36,16 @@ class RouteNextParser extends RouteInformationParser<RouteMatch> {
   @override
   RouteInformation? restoreRouteInformation(RouteMatch configuration) {
     if (configuration.isNotFound) {
-      return RouteInformation(uri: Uri(path: configuration.matchedPath));
+      return RouteInformation(uri: Uri(path: configuration.resolvedPath));
     }
     final Uri uri;
     if (configuration.query.isNotEmpty) {
       uri = Uri(
-        path: configuration.matchedPath,
+        path: configuration.resolvedPath,
         queryParameters: configuration.query,
       );
     } else {
-      uri = Uri(path: configuration.matchedPath);
+      uri = Uri(path: configuration.resolvedPath);
     }
     return RouteInformation(uri: uri);
   }

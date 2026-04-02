@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../core/route_match.dart';
 import '../core/route_next_route.dart';
 import '../core/route_registry.dart';
 import '../core/url_strategy.dart';
@@ -110,6 +111,7 @@ class _RouteNextAppState extends State<RouteNextApp> {
   late final RouteNextParser _parser;
   late final RouteNextDelegate _delegate;
   late final GlobalKey<NavigatorState> _navigatorKey;
+  late final PlatformRouteInformationProvider _routeInformationProvider;
 
   @override
   void initState() {
@@ -118,14 +120,66 @@ class _RouteNextAppState extends State<RouteNextApp> {
 
     _registry = RouteRegistry()..build(widget.routes);
     _navigatorKey = widget.navigatorKey ?? GlobalKey<NavigatorState>();
+
+    // Pre-calculate initial match for zero-flicker startup
+    final initialUri =
+        kIsWeb ? _getInitialWebUri(widget.urlStrategy) : Uri.parse('/');
+    final initialMatch = _registry.match(initialUri.path,
+            query: Map<String, String>.from(initialUri.queryParameters)) ??
+        RouteMatch.notFound(initialUri.path);
+
     _delegate = RouteNextDelegate(
       registry: _registry,
       navigatorKey: _navigatorKey,
       globalLayout: widget.layout,
       notFound: widget.notFound,
       appTitle: widget.title,
+      initialMatch: initialMatch,
     );
     _parser = RouteNextParser(registry: _registry);
+    _routeInformationProvider = PlatformRouteInformationProvider(
+      initialRouteInformation: RouteInformation(
+        uri: initialUri,
+      ),
+    );
+    _delegate.addListener(_handleRouteChanged);
+  }
+
+  @override
+  void dispose() {
+    _delegate.removeListener(_handleRouteChanged);
+    super.dispose();
+  }
+
+  void _handleRouteChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  /// Calculates the initial Uri for the application on web.
+  /// Handles both path-based and hash-based strategies.
+  Uri _getInitialWebUri(RouteNextUrlStrategy strategy) {
+    final uri = Uri.base;
+    if (strategy == RouteNextUrlStrategy.path) {
+      // We stripping origin to get a relative URI.
+      // Uri.base.path already does this, but we also want query/fragment.
+      return Uri(
+        path: uri.path.isEmpty ? '/' : uri.path,
+        queryParameters:
+            uri.queryParameters.isNotEmpty ? uri.queryParameters : null,
+      );
+    } else {
+      // In hash-based routing, the effective route is in the fragment.
+      // E.g., http://localhost:8080/#/dashboard -> fragment is "/dashboard".
+      final fragment = uri.fragment;
+      if (fragment.isEmpty) return Uri(path: '/');
+
+      // The fragment might be "/dashboard" or "dashboard".
+      // We ensure it's parsed as a relative path.
+      final pathPart = fragment.startsWith('/') ? fragment : '/$fragment';
+      return Uri.parse(pathPart);
+    }
   }
 
   @override
@@ -141,11 +195,7 @@ class _RouteNextAppState extends State<RouteNextApp> {
       debugShowCheckedModeBanner: widget.debugShowCheckedModeBanner,
       routerDelegate: _delegate,
       routeInformationParser: _parser,
-      routeInformationProvider: PlatformRouteInformationProvider(
-        initialRouteInformation: RouteInformation(
-          uri: Uri.parse(kIsWeb ? Uri.base.toString() : '/'),
-        ),
-      ),
+      routeInformationProvider: _routeInformationProvider,
       builder: (context, child) => RouteNextProvider(
         delegate: _delegate,
         currentMatch: _delegate.currentConfiguration,

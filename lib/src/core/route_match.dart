@@ -13,10 +13,13 @@ class RouteMatch {
     required this.route,
     required this.params,
     required this.query,
-    required this.matchedPath,
+    required this.path,
+    required this.resolvedPath,
     this.layoutChain = const [],
     this.guardChain = const [],
+    this.matchChain = const [],
     this.isNotFound = false,
+    this.extra,
   });
 
   /// Creates a [RouteMatch] representing a "404 Not Found" state.
@@ -28,7 +31,8 @@ class RouteMatch {
       ),
       params: const {},
       query: const {},
-      matchedPath: path,
+      path: path,
+      resolvedPath: path,
       isNotFound: true,
     );
   }
@@ -51,8 +55,11 @@ class RouteMatch {
   ///   query = {'tab': 'posts', 'sort': 'desc'}
   final Map<String, String> query;
 
-  /// The full path that was matched (without query string).
-  final String matchedPath;
+  /// The route pattern that was matched (e.g., /users/:id).
+  final String path;
+
+  /// The full resolved path (e.g., /users/42).
+  final String resolvedPath;
 
   /// The chain of layout wrappers to apply (from outermost parent to innermost).
   final List<Widget Function(BuildContext, Widget)> layoutChain;
@@ -60,8 +67,14 @@ class RouteMatch {
   /// The chain of guards to execute (from outermost parent to innermost).
   final List<Future<NavigationAction> Function(BuildContext)> guardChain;
 
+  /// The chain of matches for each level of the route hierarchy.
+  final List<RouteMatch> matchChain;
+
   /// Whether this match represents a "404 Not Found" state.
   final bool isNotFound;
+
+  /// Optional extra data passed during navigation.
+  final Object? extra;
 
   /// Merges path params and query params into a single map for convenience.
   ///
@@ -73,14 +86,40 @@ class RouteMatch {
       identical(this, other) ||
       other is RouteMatch &&
           runtimeType == other.runtimeType &&
-          matchedPath == other.matchedPath &&
+          path == other.path &&
+          resolvedPath == other.resolvedPath &&
           params == other.params &&
-          query == other.query;
+          query == other.query &&
+          matchChain == other.matchChain;
 
   @override
-  int get hashCode => matchedPath.hashCode ^ params.hashCode ^ query.hashCode;
+  int get hashCode =>
+      path.hashCode ^
+      resolvedPath.hashCode ^
+      params.hashCode ^
+      query.hashCode ^
+      matchChain.hashCode;
 
   @override
   String toString() =>
-      'RouteMatch(matchedPath: $matchedPath, params: $params, query: $query)';
+      'RouteMatch(path: $path, resolvedPath: $resolvedPath, params: $params, query: $query)';
+}
+
+/// Helper extension for parsing parameters from route maps.
+extension ParamParsingExtension on Map<String, String> {
+  /// Extract an integer parameter. Returns null if not found or invalid.
+  int? getInt(String key) => int.tryParse(this[key] ?? '');
+
+  /// Extract a double parameter. Returns null if not found or invalid.
+  double? getDouble(String key) => double.tryParse(this[key] ?? '');
+
+  /// Extract a boolean parameter. Returns true only if value is 'true'.
+  bool getBool(String key) => this[key]?.toLowerCase() == 'true';
+
+  /// Extract a parameter or throw an [ArgumentError] if missing.
+  String require(String key) {
+    final value = this[key];
+    if (value == null) throw ArgumentError('Missing required parameter: $key');
+    return value;
+  }
 }

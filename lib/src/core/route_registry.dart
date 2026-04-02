@@ -41,7 +41,7 @@ class _TrieNode {
 /// 3. Wildcard catch-all match (e.g., `/docs/*`)
 class RouteRegistry {
   final _TrieNode _root = _TrieNode();
-  final List<String> _registeredPaths = [];
+  final Set<String> _registeredPaths = {};
 
   /// Build the trie from a list of route definitions.
   ///
@@ -122,17 +122,20 @@ class RouteRegistry {
     final normalized = _normalizePath(path);
     final segments = _splitPath(normalized);
     final params = <String, String>{};
+    final chain = <RouteMatch>[];
 
-    final node = _matchNode(_root, segments, 0, params);
+    final node = _matchNode(_root, segments, 0, params, chain, query);
     if (node == null || node.route == null) return null;
 
     return RouteMatch(
       route: node.route!,
       params: Map.unmodifiable(params),
-      query: Map.unmodifiable(query),
-      matchedPath: node.fullPath ?? normalized,
+      query: Map<String, String>.from(query),
+      path: node.fullPath ?? normalized,
+      resolvedPath: normalized,
       layoutChain: node.layoutChain,
       guardChain: node.guardChain,
+      matchChain: List.unmodifiable(chain),
     );
   }
 
@@ -141,7 +144,23 @@ class RouteRegistry {
     List<String> segments,
     int index,
     Map<String, String> params,
+    List<RouteMatch> chain,
+    Map<String, String> query,
   ) {
+    // If this node defines a route, add it to the chain
+    if (node.route != null) {
+      chain.add(RouteMatch(
+        route: node.route!,
+        params: Map.unmodifiable(params),
+        query: Map.unmodifiable(query),
+        path: node.fullPath!,
+        resolvedPath: _normalizePath(
+            segments.sublist(0, index).join('/')), // Reconstruct resolved path
+        layoutChain: node.layoutChain,
+        guardChain: node.guardChain,
+      ));
+    }
+
     if (index == segments.length) {
       return node.route != null ? node : null;
     }
@@ -150,21 +169,42 @@ class RouteRegistry {
 
     // Priority 1: static match
     if (node.staticChildren.containsKey(segment)) {
+      final childChain = List<RouteMatch>.from(chain);
       final result = _matchNode(
         node.staticChildren[segment]!,
         segments,
         index + 1,
         params,
+        childChain,
+        query,
       );
-      if (result != null) return result;
+      if (result != null) {
+        chain.clear();
+        chain.addAll(childChain);
+        return result;
+      }
     }
 
     // Priority 2: dynamic param match
     if (node.paramChild != null) {
       final savedParams = Map<String, String>.from(params);
+      final childChain = List<RouteMatch>.from(chain);
       params[node.paramChild!.paramName!] = Uri.decodeComponent(segment);
-      final result = _matchNode(node.paramChild!, segments, index + 1, params);
-      if (result != null) return result;
+
+      final result = _matchNode(
+        node.paramChild!,
+        segments,
+        index + 1,
+        params,
+        childChain,
+        query,
+      );
+
+      if (result != null) {
+        chain.clear();
+        chain.addAll(childChain);
+        return result;
+      }
       params
         ..clear()
         ..addAll(savedParams);
@@ -173,7 +213,19 @@ class RouteRegistry {
     // Priority 3: wildcard catch-all
     if (node.wildcardChild != null) {
       params['*'] = segments.sublist(index).map(Uri.decodeComponent).join('/');
-      return node.wildcardChild!.route != null ? node.wildcardChild : null;
+      final result = node.wildcardChild!.route != null ? node.wildcardChild : null;
+      if (result != null && result.route != null) {
+        chain.add(RouteMatch(
+          route: result.route!,
+          params: Map.unmodifiable(params),
+          query: Map.unmodifiable(query),
+          path: result.fullPath!,
+          resolvedPath: _normalizePath(segments.join('/')),
+          layoutChain: result.layoutChain,
+          guardChain: result.guardChain,
+        ));
+      }
+      return result;
     }
 
     return null;
