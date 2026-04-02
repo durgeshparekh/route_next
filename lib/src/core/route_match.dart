@@ -61,6 +61,10 @@ class RouteMatch {
   /// The full resolved path (e.g., /users/42).
   final String resolvedPath;
 
+  /// Deprecated. Use [resolvedPath] instead.
+  @Deprecated('Use resolvedPath instead. Will be removed in 2.0.0')
+  String get matchedPath => resolvedPath;
+
   /// The chain of layout wrappers to apply (from outermost parent to innermost).
   final List<Widget Function(BuildContext, Widget)> layoutChain;
 

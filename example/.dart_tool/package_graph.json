@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "route_next_example",
-      "version": "1.0.0+1",
+      "version": "1.1.0",
       "dependencies": [
         "flutter",
         "route_next"
@@ -14,7 +14,7 @@
     },
     {
       "name": "route_next",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": [
         "flutter",
         "flutter_web_plugins"

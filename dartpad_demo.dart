@@ -411,7 +411,7 @@ class MyApp extends StatelessWidget {
             path: '/users/:id',
             builder: (context, params) => Center(
                 child: Text('User Profile: ID ${params['id']}',
-                    style: TextStyle(fontSize: 24)))),
+                    style: const TextStyle(fontSize: 24)))),
         RouteNextRoute(
           path: '/admin',
           guard: (context) async {
