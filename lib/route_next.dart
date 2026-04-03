@@ -28,6 +28,7 @@ export 'src/core/navigation_action.dart';
 export 'src/core/page_transition.dart';
 export 'src/core/url_strategy.dart';
 export 'src/core/route_registry.dart';
+export 'src/core/route_next_middleware.dart';
 
 // Widgets
 export 'src/widgets/route_next_app.dart';
@@ -36,6 +37,9 @@ export 'src/widgets/route_next_drawer.dart';
 export 'src/widgets/route_next_sidebar.dart';
 export 'src/widgets/route_next_navbar.dart';
 export 'src/widgets/nav_item.dart';
+export 'src/widgets/route_next_breadcrumbs.dart';
+export 'src/widgets/route_next_command_palette.dart';
+export 'src/widgets/route_next_tab_bar.dart';
 
 // Navigation API
 export 'src/navigation/route_next.dart';

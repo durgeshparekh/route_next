@@ -1,8 +1,8 @@
 name: route_next
 description: >-
-  Next.js-style router for Flutter with nested layouts, async guards,
-  deep linking, and automatic browser history integration.
-version: 1.2.0
+  Next.js-style Flutter router — URL-driven navigation, nested layouts,
+  global middleware, async guards, breadcrumbs, command palette, and tab bar.
+version: 1.2.1
 topics:
   - navigation
   - router

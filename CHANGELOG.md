@@ -1,3 +1,30 @@
+## 1.2.1
+
+### New Features
+
+* **Global middleware pipeline**: Add app-wide `middleware` to `RouteNextApp` — runs before per-route guards on every navigation. Compose analytics, auth gates, and feature flags without attaching guards to individual routes.
+  ```dart
+  RouteNextApp(
+    middleware: [
+      (context, match) async {
+        Analytics.track(match.resolvedPath);
+        return NavigationAction.allow();
+      },
+    ],
+    routes: [...],
+  )
+  ```
+* **`RouteNextBreadcrumbs`**: Auto-generated breadcrumb trail driven by `RouteMatch.matchChain`. Labels are derived from `RouteMeta.title`, a custom `labelBuilder`, or the capitalised path segment. Supports custom separators, text styles, and padding.
+* **`RouteNextCommandPalette`**: ⌘K / Ctrl+K command palette overlay. Supports fuzzy substring search, keyboard navigation (↑↓ Enter Esc), group badges, and both route navigation and arbitrary `onSelect` callbacks.
+* **`RouteNextTabBar`**: URL-driven tab bar where the active tab is determined by `RouteNext.isActive()`. Works as a standalone widget or as `AppBar.bottom` via `.asPreferredSize()`. Supports scrollable mode, custom colors, and icon+label tabs. Correctly hides the indicator when no tab matches the current URL.
+
+### Bug Fixes
+
+* **`RouteNextCommandPalette` — FocusNode memory leaks**: Two `FocusNode` instances were previously created inline inside `build()` methods (both in `_RouteNextCommandPaletteState` and `_PaletteOverlayState`), causing a new unmanaged node to be allocated on every rebuild. Fixed by promoting both to named fields disposed in their respective `dispose()` methods.
+* **`RouteNextTabBar` — ghost active tab**: When the current URL matched none of the tabs, `activeIndex` fell back to `0`, causing the first tab to appear falsely selected. Fixed by tracking `hasActiveTab` separately; when `false`, the indicator and label color are both suppressed.
+
+---
+
 ## 1.2.0
 
 ### Bug Fixes

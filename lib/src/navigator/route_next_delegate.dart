@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/navigation_action.dart';
 import '../core/page_transition.dart';
 import '../core/route_match.dart';
+import '../core/route_next_middleware.dart';
 import '../core/route_registry.dart';
 import 'guard_runner.dart';
 import 'document_title_stub.dart'
@@ -25,6 +26,7 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
     this.globalLayout,
     this.notFound,
     this.appTitle = '',
+    this.middleware = const [],
     RouteMatch? initialMatch,
   }) : _navigatorKey = navigatorKey {
     if (initialMatch != null) {
@@ -43,6 +45,12 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
 
   /// The application title (used as fallback document.title).
   final String appTitle;
+
+  /// Global middleware pipeline. Runs before per-route guards on every navigation.
+  ///
+  /// Middleware executes in declaration order. The first non-allow result
+  /// short-circuits the pipeline — per-route guards are skipped entirely.
+  final List<RouteNextMiddleware> middleware;
 
   final GlobalKey<NavigatorState> _navigatorKey;
   final List<RouteMatch> _stack = [];
@@ -150,13 +158,47 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
       return;
     }
 
+    final context = navigatorKey.currentContext;
+
+    // Run global middleware pipeline first (even for 404 matches).
+    if (context != null && middleware.isNotEmpty) {
+      for (final mw in middleware) {
+        late final NavigationAction mwAction;
+        try {
+          mwAction = await mw(context, configuration);
+        } catch (error, stackTrace) {
+          FlutterError.reportError(FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'route_next',
+            context: ErrorDescription('while running global middleware'),
+          ));
+          if (_stack.isEmpty) notifyListeners();
+          return;
+        }
+        // Context may have been disposed while awaiting the middleware.
+        if (navigatorKey.currentContext == null) return;
+        switch (mwAction.type) {
+          case NavigationActionType.allow:
+            break; // continue to next middleware
+          case NavigationActionType.redirect:
+            final redirectMatch = registry.match(mwAction.redirectPath!) ??
+                RouteMatch.notFound(mwAction.redirectPath!);
+            await _handleNewPath(redirectMatch, depth + 1, replace: replace);
+            return;
+          case NavigationActionType.deny:
+            if (_stack.isEmpty) notifyListeners();
+            return;
+        }
+      }
+    }
+
     if (configuration.isNotFound) {
       _commitToStack(configuration, replace: replace);
       notifyListeners();
       return;
     }
 
-    final context = navigatorKey.currentContext;
     if (context == null || configuration.guardChain.isEmpty) {
       _commitToStack(configuration, replace: replace);
       _updateDocumentTitle(configuration);

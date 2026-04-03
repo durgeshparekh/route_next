@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../core/route_match.dart';
+import '../core/route_next_middleware.dart';
 import '../core/route_next_route.dart';
 import '../core/route_registry.dart';
 import '../core/url_strategy.dart';
@@ -45,6 +46,7 @@ class RouteNextApp extends StatefulWidget {
   const RouteNextApp({
     super.key,
     required this.routes,
+    this.middleware = const [],
     this.layout,
     this.notFound,
     this.urlStrategy = RouteNextUrlStrategy.path,
@@ -62,6 +64,14 @@ class RouteNextApp extends StatefulWidget {
 
   /// List of top-level route definitions.
   final List<RouteNextRoute> routes;
+
+  /// Global middleware pipeline. Runs before per-route guards on every navigation.
+  ///
+  /// Middleware executes in declaration order. The first non-allow result
+  /// short-circuits the pipeline — per-route guards are skipped entirely.
+  ///
+  /// See [RouteNextMiddleware] for the function signature.
+  final List<RouteNextMiddleware> middleware;
 
   /// Global layout wrapper applied to ALL routes.
   final Widget Function(BuildContext context, Widget child)? layout;
@@ -134,6 +144,7 @@ class _RouteNextAppState extends State<RouteNextApp> {
       globalLayout: widget.layout,
       notFound: widget.notFound,
       appTitle: widget.title,
+      middleware: widget.middleware,
       initialMatch: initialMatch,
     );
     _parser = RouteNextParser(registry: _registry);
