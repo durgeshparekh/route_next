@@ -165,6 +165,7 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
       for (final mw in middleware) {
         late final NavigationAction mwAction;
         try {
+          // ignore: use_build_context_synchronously
           mwAction = await mw(context, configuration);
         } catch (error, stackTrace) {
           FlutterError.reportError(FlutterErrorDetails(
@@ -206,6 +207,7 @@ class RouteNextDelegate extends RouterDelegate<RouteMatch>
       return;
     }
 
+    // ignore: use_build_context_synchronously
     final action = await GuardRunner.run(context, configuration.guardChain);
 
     switch (action.type) {
